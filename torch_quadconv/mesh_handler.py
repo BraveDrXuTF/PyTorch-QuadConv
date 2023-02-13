@@ -37,16 +37,17 @@ class MeshHandler(nn.Module):
 
         #weights
         if input_weights is None:
-            input_weights = torch.zeros(input_points.shape[0])
-            input_weights = torch.nn.init.uniform_(input_weights, a= 0, b = 1)
-            self.weight_activation = getattr(nn, weight_activation)()
-            req_grad = True
+            # input_weights = torch.zeros(input_points.shape[0])
+            # input_weights = torch.nn.init.uniform_(input_weights, a=0, b=1)
+            # self.weight_activation = getattr(nn, weight_activation)()
+            # req_grad = True
+            self.build_quad_map()
         else:
             req_grad = False
             self.weight_activation = getattr(nn, weight_activation)()
 
-        self._weights = nn.ParameterList([nn.Parameter(input_weights, requires_grad=req_grad)])
-
+        # self._weights = nn.ParameterList([nn.Parameter(input_weights, requires_grad=req_grad)])
+        self._quad_map = getattr(quadrature, quad_map)
 
         #adjacency
         if input_adjacency != None:
@@ -57,7 +58,6 @@ class MeshHandler(nn.Module):
         #other attributes
         self._spatial_dim = input_points.shape[1]
         self._current_index = 0
-        self._quad_map = getattr(quadrature, quad_map)
 
         return
 
@@ -79,17 +79,51 @@ class MeshHandler(nn.Module):
 
     @property
     def weights(self):
-
-
         if self.normalize_weights:
             with torch.no_grad():
                 self._weights[self._get_index()] = self._weights[self._get_index()] / torch.sum(self.weight_activation(self._weights[self._get_index()]))
 
-        return self.weight_activation(self._weights[self._get_index()])
+        # return self.weight_activation(self._weights[self._get_index()])
+        return self.quad_map_eval(torch.t(self._points[self._get_index()]))
 
     @property
     def adjacency(self):
         return self._adjacency[self._get_index()]
+
+    '''
+    Build a learnable map from mesh points to quadrature weights.
+
+    Input:
+    '''
+    def build_quad_map(self):
+
+        self.local_1 = nn.Sequential(
+                            nn.Conv1d(2, 10, 1),
+                            nn.InstanceNorm1d(10, affine=True),
+                            nn.Sigmoid())
+
+        self.local_2 = nn.Sequential(
+                            nn.Conv1d(10, 10, 1),
+                            nn.InstanceNorm1d(10, affine=True))
+
+        self.pool = nn.AdaptiveAvgPool2d(1)
+
+        self.act = nn.Sigmoid()
+
+        self.local_3 = nn.Sequential(
+                            nn.Conv1d(10, 1, 1),
+                            nn.InstanceNorm1d(1, affine=True),
+                            nn.Sigmoid())
+
+        return
+
+    def quad_map_eval(self, x):
+
+        x = self.local_1(x)
+        x = self.act(self.local_2(x) + self.pool(x))
+        w = self.local_3(x)
+
+        return w.squeeze()
 
     '''
     Cache mesh stages.
@@ -113,16 +147,16 @@ class MeshHandler(nn.Module):
             points, weights = self._quad_map(self._points[i-1], num_points)
 
             if weights is None:
-                weights = torch.ones(points.shape[0])
-                #weights = torch.nn.init.uniform_(weights, a= 0, b = 1)
-                weights /= torch.sum(weights)
-
-                req_grad = True
+                # weights = torch.ones(points.shape[0])
+                # weights /= torch.sum(weights)
+                #
+                # req_grad = True
+                pass
             else:
                 req_grad = False
 
             self._points.append(nn.Parameter(points, requires_grad=False))
-            self._weights.append(nn.Parameter(weights, requires_grad=req_grad))
+            # self._weights.append(nn.Parameter(weights, requires_grad=req_grad))
 
         #mirror the sequence, but reuse underlying data
         if mirror:
