@@ -212,7 +212,8 @@ class QuadConv(nn.Module):
             eval_indices = self._compute_eval_indices(handler)
 
         #get weights
-        weights = handler.weights[eval_indices[:,1]]
+        # weights = handler.weights[eval_indices[:,1]]
+        weights = handler.get_weights(eval_indices[:,1])
 
         #compute eval locs
         if self.output_same:

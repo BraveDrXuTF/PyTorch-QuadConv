@@ -86,6 +86,9 @@ class MeshHandler(nn.Module):
         # return self.weight_activation(self._weights[self._get_index()])
         return self.quad_map_eval(torch.t(self._points[self._get_index()]))
 
+    def get_weights(self, indices):
+        return self.quad_map_eval(torch.t(self._points[self._get_index()][indices]))
+
     @property
     def adjacency(self):
         return self._adjacency[self._get_index()]
